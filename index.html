@@ -113,7 +113,7 @@ function polyFill(pts) {
   ctx.closePath();
   ctx.fill();
 }
-function drawObj(m, x, z, yaw, y0 = 0, s = 1) {
+function drawObj(m, x, z, yaw, y0 = 0, s = 1, col = null) {
   const c = Math.cos(yaw), sn = Math.sin(yaw);
   const pts = m.v.map(([lx, ly, lz]) => {
     lx *= s; ly *= s; lz *= s;
@@ -125,9 +125,11 @@ function drawObj(m, x, z, yaw, y0 = 0, s = 1) {
     for (const f of m.f) polyFill(f.map(i => pts[i]));
   }
   ctx.shadowBlur = 6;
+  if (col) { ctx.strokeStyle = col[0]; ctx.shadowColor = col[1]; }
   ctx.beginPath();
   for (const [a, b] of m.e) seg(pts[a], pts[b]);
   ctx.stroke();
+  if (col) { ctx.strokeStyle = '#5f5'; ctx.shadowColor = '#0f0'; }
 }
 
 /* ------------------------------ Audio ------------------------------ */
@@ -480,7 +482,7 @@ function render() {
   const objs = [];
   const depth = (x, z) => cam(x, 0, z)[2];
   for (const o of obstacles) { const d = depth(o.x, o.z); if (d > -4) objs.push({ d, f: () => drawObj(o.m, o.x, o.z, o.yaw) }); }
-  for (const e of enemies) { const d = depth(e.x, e.z); if (d > -4) objs.push({ d, f: () => drawObj(TANK, e.x, e.z, e.h) }); }
+  for (const e of enemies) { const d = depth(e.x, e.z); if (d > -4) objs.push({ d, f: () => drawObj(TANK, e.x, e.z, e.h, 0, 1, ['#f33', '#f00']) }); }
   for (const s of shells) {
     const d = depth(s.x, s.z);
     if (d > -2) objs.push({ d, f: () => drawObj(SHELL, s.x, s.z, Math.atan2(s.dx, s.dz), 1.0, 0.3) });
