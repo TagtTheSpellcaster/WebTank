@@ -163,7 +163,6 @@
                 if (!this.ctx) return;
                 const now = this.ctx.currentTime;
 
-                // Osc 1: Frequency sweep
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
                 osc.type = 'sawtooth';
@@ -179,7 +178,6 @@
                 osc.start(now);
                 osc.stop(now + 0.25);
 
-                // Noise Burst for muzzle blast
                 this.playNoise(0.15, 0.4);
             }
 
@@ -188,7 +186,6 @@
                 if (!this.ctx) return;
                 const now = this.ctx.currentTime;
 
-                // Low-frequency rumble
                 const osc = this.ctx.createOscillator();
                 const gain = this.ctx.createGain();
                 osc.type = 'square';
@@ -204,7 +201,6 @@
                 osc.start(now);
                 osc.stop(now + 0.6);
 
-                // Heavy Noise
                 this.playNoise(0.6, 0.6);
             }
 
@@ -255,7 +251,7 @@
                 noise.start();
             }
 
-            // Continuous hum for engine movement
+            // Continuous engine hum
             startEngine() {
                 if (!this.ctx || this.isEnginePlaying) return;
                 const now = this.ctx.currentTime;
@@ -300,29 +296,23 @@
                 this.y = y;
                 this.z = z;
             }
-
-            clone() {
-                return new Vector3(this.x, this.y, this.z);
-            }
         }
 
-        // 3D Model Wireframe Templates
+        // 3D Model Templates
         const MODELS = {
-            // Pyramid Obstacle
             pyramid: {
                 vertices: [
-                    new Vector3(0, 40, 0),     // Apex
-                    new Vector3(-25, 0, -25),  // Base corners
+                    new Vector3(0, 40, 0),
+                    new Vector3(-25, 0, -25),
                     new Vector3(25, 0, -25),
                     new Vector3(25, 0, 25),
                     new Vector3(-25, 0, 25)
                 ],
                 edges: [
-                    [0, 1], [0, 2], [0, 3], [0, 4], // Sides
-                    [1, 2], [2, 3], [3, 4], [4, 1]  // Base
+                    [0, 1], [0, 2], [0, 3], [0, 4],
+                    [1, 2], [2, 3], [3, 4], [4, 1]
                 ]
             },
-            // Cube Obstacle
             cube: {
                 vertices: [
                     new Vector3(-20, 0, -20), new Vector3(20, 0, -20),
@@ -336,36 +326,25 @@
                     [0, 4], [1, 5], [2, 6], [3, 7]
                 ]
             },
-            // Enemy Tank Model
             enemyTank: {
                 vertices: [
-                    // Hull lower base
                     new Vector3(-20, 0, -30), new Vector3(20, 0, -30),
                     new Vector3(25, 0, 30),  new Vector3(-25, 0, 30),
-                    // Hull upper deck
                     new Vector3(-18, 12, -25), new Vector3(18, 12, -25),
                     new Vector3(20, 12, 25),  new Vector3(-20, 12, 25),
-                    // Turret base
                     new Vector3(-10, 12, -10), new Vector3(10, 12, -10),
                     new Vector3(10, 12, 10),  new Vector3(-10, 12, 10),
-                    // Turret top
                     new Vector3(-8, 22, -8),  new Vector3(8, 22, -8),
                     new Vector3(8, 22, 8),   new Vector3(-8, 22, 8),
-                    // Cannon Barrel
                     new Vector3(0, 17, 8),   new Vector3(0, 17, 38)
                 ],
                 edges: [
-                    // Bottom hull
                     [0,1], [1,2], [2,3], [3,0],
-                    // Top hull
                     [4,5], [5,6], [6,7], [7,4],
-                    // Hull verticals
                     [0,4], [1,5], [2,6], [3,7],
-                    // Turret sides
                     [8,9], [9,10], [10,11], [11,8],
                     [12,13], [13,14], [14,15], [15,12],
                     [8,12], [9,13], [10,14], [11,15],
-                    // Cannon
                     [16,17]
                 ]
             }
@@ -400,6 +379,7 @@
             maxSpeed: 180, // units/sec
             rotSpeed: 1.8,  // rad/sec
             cooldown: 0,
+            maxCooldown: 0.3, // Responsive 300ms reload time
             radius: 20
         };
 
@@ -437,6 +417,30 @@
         window.addEventListener('resize', resize);
         resize();
 
+        // Direct Cannon Fire function
+        function triggerPlayerFire() {
+            if (gameState !== STATE.PLAYING) {
+                startGame();
+                return;
+            }
+
+            if (player.cooldown <= 0) {
+                audio.playShoot();
+                projectiles.push({
+                    x: player.x + Math.sin(player.angle) * 35,
+                    y: 15,
+                    z: player.z + Math.cos(player.angle) * 35,
+                    vx: Math.sin(player.angle) * 800, // Faster, accurate shell velocity
+                    vy: 0,
+                    vz: Math.cos(player.angle) * 800,
+                    owner: 'player',
+                    radius: 12,
+                    life: 3.5
+                });
+                player.cooldown = player.maxCooldown;
+            }
+        }
+
         // Keyboard Event Handlers
         window.addEventListener('keydown', (e) => {
             audio.init();
@@ -448,8 +452,9 @@
                 case 'KeyA': case 'ArrowLeft': keys.left = true; break;
                 case 'KeyD': case 'ArrowRight': keys.right = true; break;
                 case 'Space': 
-                    keys.fire = true; 
-                    if (gameState !== STATE.PLAYING) startGame();
+                    keys.fire = true;
+                    triggerPlayerFire();
+                    e.preventDefault();
                     break;
             }
         });
@@ -465,11 +470,13 @@
         });
 
         // Pointer/Click Fire trigger
-        window.addEventListener('pointerdown', () => {
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target.tagName === 'BUTTON') return;
             audio.init();
             if (gameState === STATE.PLAYING) {
                 audio.startEngine();
                 keys.fire = true;
+                triggerPlayerFire();
             } else {
                 startGame();
             }
@@ -480,7 +487,12 @@
         const bindTouch = (id, key) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); audio.init(); keys[key] = true; });
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                audio.init();
+                keys[key] = true;
+                if (key === 'fire') triggerPlayerFire();
+            });
             btn.addEventListener('touchend', (e) => { e.preventDefault(); keys[key] = false; });
         };
 
@@ -499,7 +511,6 @@
             projectiles = [];
             particles = [];
 
-            // Generate map wireframe obstacles
             const numObstacles = 24;
             const mapRadius = 2500;
 
@@ -509,7 +520,7 @@
                     ox = (Math.random() - 0.5) * mapRadius;
                     oz = (Math.random() - 0.5) * mapRadius;
                     dist = Math.hypot(ox, oz);
-                } while (dist < 300); // Keep center clear for player spawn
+                } while (dist < 300);
 
                 const type = Math.random() > 0.5 ? 'pyramid' : 'cube';
                 obstacles.push({
@@ -524,7 +535,7 @@
         }
 
         function spawnEnemy() {
-            if (enemies.length >= 3) return; // Cap simultaneous enemies
+            if (enemies.length >= 3) return;
 
             let ex, ez, dist;
             do {
@@ -538,11 +549,11 @@
                 x: ex,
                 z: ez,
                 angle: Math.random() * Math.PI * 2,
-                speed: 70,
+                speed: 80,
                 radius: 30,
-                cooldown: Math.random() * 2,
-                stateTimer: 0,
-                state: 'patrol' // 'patrol' or 'attack'
+                cooldown: 0.5 + Math.random() * 1.0,
+                maxEffectiveRange: 1500,
+                maxAngleTolerance: 0.5
             });
         }
 
@@ -561,32 +572,25 @@
         // =================================================================
         // PROJECTION & RENDERING PIPELINE
         // =================================================================
-
-        // Transforms world coordinates to 2D screen coordinates relative to player view
         function project(x, y, z) {
-            // Translate relative to player position
             const dx = x - player.x;
-            const dy = y; // Height off ground
+            const dy = y;
             const dz = z - player.z;
 
-            // Rotate relative to player orientation angle
             const cos = Math.cos(-player.angle);
             const sin = Math.sin(-player.angle);
 
             const rx = dx * cos - dz * sin;
             const rz = dx * sin + dz * cos;
 
-            // Near-plane clipping to prevent inverse projection behind camera
             if (rz <= 5) return null;
 
-            // Perspective division
             const px = (rx / rz) * fov + width / 2;
             const py = (-dy / rz) * fov + height / 2;
 
             return { x: px, y: py, depth: rz };
         }
 
-        // Draw distant vector horizon and mountains
         function drawHorizon() {
             CTX.save();
             CTX.strokeStyle = '#00ff44';
@@ -594,20 +598,17 @@
             CTX.shadowBlur = 4;
             CTX.shadowColor = '#00ff44';
 
-            // Horizon base line
             CTX.beginPath();
             CTX.moveTo(0, height / 2);
             CTX.lineTo(width, height / 2);
             CTX.stroke();
 
-            // Distant wireframe mountains rotation according to player angle
             CTX.beginPath();
             let first = true;
             for (let i = 0; i <= mountains.length; i++) {
                 const idx = i % mountains.length;
                 const m = mountains[idx];
                 
-                // Angle relative to player orientation
                 let diff = m.angle - player.angle;
                 while (diff < -Math.PI) diff += Math.PI * 2;
                 while (diff > Math.PI) diff -= Math.PI * 2;
@@ -630,7 +631,6 @@
             CTX.restore();
         }
 
-        // Draw 3D wireframe model at world position
         function drawWireframeModel(model, posX, posZ, rotY = 0, color = '#00ff44') {
             CTX.save();
             CTX.strokeStyle = color;
@@ -642,7 +642,6 @@
             const cos = Math.cos(rotY);
             const sin = Math.sin(rotY);
 
-            // Rotate and translate local model coordinates to world coordinates
             for (let v of model.vertices) {
                 const wx = posX + (v.x * cos + v.z * sin);
                 const wy = v.y;
@@ -652,7 +651,6 @@
                 projectedPoints.push(p);
             }
 
-            // Draw connecting edges
             for (let edge of model.edges) {
                 const p1 = projectedPoints[edge[0]];
                 const p2 = projectedPoints[edge[1]];
@@ -667,7 +665,6 @@
             CTX.restore();
         }
 
-        // Dynamic 3D Ground Grid relative to player movement
         function drawGroundGrid() {
             CTX.save();
             CTX.strokeStyle = 'rgba(0, 255, 68, 0.15)';
@@ -678,11 +675,12 @@
             const startX = Math.floor((player.x - gridSize * numLines / 2) / gridSize) * gridSize;
             const startZ = Math.floor((player.z - gridSize * numLines / 2) / gridSize) * gridSize;
 
-            for (let i = 0; i < numLines; i++) {
-                // Lines parallel to Z axis
-                const x = startX + i * gridSize;
-                const p1 = project(x, 0, startZ);
-                const p2 = project(x, 0, startZ + numLines * gridSize);
+            for (let i = 0; i <= numLines; i++) {
+                const lx = startX + i * gridSize;
+                const lz = startZ + i * gridSize;
+
+                const p1 = project(lx, 0, player.z - gridSize * numLines / 2);
+                const p2 = project(lx, 0, player.z + gridSize * numLines / 2);
                 if (p1 && p2) {
                     CTX.beginPath();
                     CTX.moveTo(p1.x, p1.y);
@@ -690,10 +688,8 @@
                     CTX.stroke();
                 }
 
-                // Lines parallel to X axis
-                const z = startZ + i * gridSize;
-                const p3 = project(startX, 0, z);
-                const p4 = project(startX + numLines * gridSize, 0, z);
+                const p3 = project(player.x - gridSize * numLines / 2, 0, lz);
+                const p4 = project(player.x + gridSize * numLines / 2, 0, lz);
                 if (p3 && p4) {
                     CTX.beginPath();
                     CTX.moveTo(p3.x, p3.y);
@@ -728,31 +724,41 @@
             CTX.moveTo(cx, cy + 10); CTX.lineTo(cx, cy + 30);
             CTX.stroke();
 
+            // Weapon Reload Status Indicator below Reticle
+            if (player.cooldown > 0) {
+                CTX.font = '12px "Courier New", monospace';
+                CTX.textAlign = 'center';
+                CTX.fillStyle = '#ffaa00';
+                CTX.shadowColor = '#ffaa00';
+                CTX.fillText('RELOADING...', cx, cy + 50);
+            } else {
+                CTX.font = '12px "Courier New", monospace';
+                CTX.textAlign = 'center';
+                CTX.fillStyle = '#00ff44';
+                CTX.fillText('READY', cx, cy + 50);
+            }
+
             // Cockpit Frame corners
             const margin = 30;
             CTX.beginPath();
-            // Top Left Corner
             CTX.moveTo(margin, margin + 40); CTX.lineTo(margin, margin); CTX.lineTo(margin + 40, margin);
-            // Top Right Corner
-            CTX.moveTo(width - margin - 40, margin); CTX.lineTo(width - margin, margin); CTX.lineTo(width - margin, margin + 40);
-            // Bottom Left Corner
+            CTX.moveTo(width - margin - 40, margin); CTX.lineTo(width - margin); CTX.lineTo(width - margin, margin + 40);
             CTX.moveTo(margin, height - margin - 40); CTX.lineTo(margin, height - margin); CTX.lineTo(margin + 40, height - margin);
-            // Bottom Right Corner
-            CTX.moveTo(width - margin - 40, height - margin); CTX.lineTo(width - margin, height - margin); CTX.lineTo(width - margin, height - margin - 40);
+            CTX.moveTo(width - margin - 40, height - margin); CTX.lineTo(width - margin); CTX.lineTo(width - margin, height - margin - 40);
             CTX.stroke();
 
             // Vector Text HUD Stats
+            CTX.textAlign = 'left';
             CTX.font = '20px "Courier New", monospace';
             CTX.fillText(`SCORE: ${score.toString().padStart(6, '0')}`, margin + 20, margin + 40);
             CTX.fillText(`ARMOR: ${Math.max(0, playerHealth)}%`, margin + 20, margin + 70);
 
-            // Radar display rendering (Top Right)
+            // Dynamic Radar System
             const radarSize = 120;
             const radarX = width - margin - radarSize - 10;
             const radarY = margin + 10;
             const radarRange = 1200;
 
-            // Radar background box & crosshairs
             CTX.strokeStyle = '#00ff44';
             CTX.strokeRect(radarX, radarY, radarSize, radarSize);
             CTX.globalAlpha = 0.3;
@@ -765,17 +771,14 @@
             const rcx = radarX + radarSize / 2;
             const rcy = radarY + radarSize / 2;
 
-            // Player dot & direction indicator on Radar
             CTX.fillStyle = '#00ff44';
             CTX.fillRect(rcx - 2, rcy - 2, 4, 4);
 
-            // Blips for Enemies
             CTX.fillStyle = '#ff3333';
             for (let e of enemies) {
                 const dx = e.x - player.x;
                 const dz = e.z - player.z;
 
-                // Rotate relative to player angle on radar
                 const cos = Math.cos(-player.angle);
                 const sin = Math.sin(-player.angle);
                 const rx = dx * cos - dz * sin;
@@ -788,7 +791,6 @@
                 }
             }
 
-            // Blips for Obstacles
             CTX.fillStyle = 'rgba(0, 255, 68, 0.6)';
             for (let o of obstacles) {
                 const dx = o.x - player.x;
@@ -808,7 +810,6 @@
             CTX.restore();
         }
 
-        // Vector Particle Explosion Sparks
         function createExplosion(x, y, z, count = 25, isRed = false) {
             for (let i = 0; i < count; i++) {
                 const speed = 80 + Math.random() * 200;
@@ -870,21 +871,12 @@
                 player.z = newZ;
             }
 
-            // Cannon Firing
+            // Cannon Reload Cooldown Tick
             if (player.cooldown > 0) player.cooldown -= dt;
+            
+            // Continuous auto-fire support if key is held down
             if (keys.fire && player.cooldown <= 0) {
-                audio.playShoot();
-                projectiles.push({
-                    x: player.x + Math.sin(player.angle) * 20,
-                    y: 15,
-                    z: player.z + Math.cos(player.angle) * 20,
-                    vx: Math.sin(player.angle) * 600,
-                    vy: 0,
-                    vz: Math.cos(player.angle) * 600,
-                    owner: 'player',
-                    life: 2.5
-                });
-                player.cooldown = 0.4; // Fire rate limit
+                triggerPlayerFire();
             }
 
             // Update Projectiles
@@ -911,13 +903,13 @@
                 if (!hit && p.owner === 'player') {
                     for (let j = enemies.length - 1; j >= 0; j--) {
                         const e = enemies[j];
-                        if (Math.hypot(p.x - e.x, p.z - e.z) < e.radius) {
+                        if (Math.hypot(p.x - e.x, p.z - e.z) < e.radius + (p.radius || 10)) {
                             hit = true;
                             createExplosion(e.x, 10, e.z, 35, true);
                             audio.playExplosion();
                             enemies.splice(j, 1);
                             score += 500;
-                            setTimeout(spawnEnemy, 3000); // Respawn delayed
+                            setTimeout(spawnEnemy, 3000);
                             break;
                         }
                     }
@@ -964,19 +956,20 @@
 
                 // Enemy Firing Logic
                 if (e.cooldown > 0) e.cooldown -= dt;
-                if (distToPlayer < 900 && Math.abs(angleDiff) < 0.3 && e.cooldown <= 0) {
+                if (distToPlayer < 900 && Math.abs(angleDiff) < 0.5 && e.cooldown <= 0) {
                     audio.playShoot();
                     projectiles.push({
                         x: e.x + Math.sin(e.angle) * 30,
                         y: 15,
                         z: e.z + Math.cos(e.angle) * 30,
-                        vx: Math.sin(e.angle) * 450,
+                        vx: Math.sin(e.angle) * 500,
                         vy: 0,
-                        vz: Math.cos(e.angle) * 450,
+                        vz: Math.cos(e.angle) * 500,
                         owner: 'enemy',
+                        radius: 8,
                         life: 3.0
                     });
-                    e.cooldown = 2.5 + Math.random() * 1.5; // Enemy fire interval
+                    e.cooldown = 2.0 + Math.random() * 1.5;
                 }
             }
 
@@ -986,36 +979,29 @@
                 pt.x += pt.vx * dt;
                 pt.y += pt.vy * dt;
                 pt.z += pt.vz * dt;
-                pt.vy -= 150 * dt; // Gravity
-                if (pt.y < 0) { pt.y = 0; pt.vy = -pt.vy * 0.3; } // Floor bounce
+                pt.vy -= 150 * dt;
+                if (pt.y < 0) { pt.y = 0; pt.vy = -pt.vy * 0.3; }
                 pt.life -= dt;
                 if (pt.life <= 0) particles.splice(i, 1);
             }
         }
 
         function render() {
-            // Clear frame with dark vector background
             CTX.fillStyle = '#020b02';
             CTX.fillRect(0, 0, width, height);
 
             if (gameState === STATE.PLAYING || gameState === STATE.GAMEOVER) {
-                // 1. Vector Horizon & Mountains
                 drawHorizon();
-
-                // 2. Ground Grid
                 drawGroundGrid();
 
-                // 3. Obstacles
                 for (let o of obstacles) {
                     drawWireframeModel(MODELS[o.type], o.x, o.z, 0, '#00ff44');
                 }
 
-                // 4. Enemy Tanks
                 for (let e of enemies) {
                     drawWireframeModel(MODELS.enemyTank, e.x, e.z, e.angle, '#ff3333');
                 }
 
-                // 5. Wireframe Diamond Shell Projectiles
                 for (let p of projectiles) {
                     const projPoint = project(p.x, p.y, p.z);
                     if (projPoint) {
@@ -1032,7 +1018,6 @@
                     }
                 }
 
-                // 6. Explosion Particle Sparks
                 for (let pt of particles) {
                     const pPoint = project(pt.x, pt.y, pt.z);
                     if (pPoint) {
@@ -1046,11 +1031,9 @@
                     }
                 }
 
-                // 7. Cockpit HUD & Radar Display
                 drawHUD();
             }
 
-            // Menu Screen Overlay
             if (gameState === STATE.MENU) {
                 CTX.save();
                 CTX.fillStyle = '#00ff44';
@@ -1073,7 +1056,6 @@
                 CTX.restore();
             }
 
-            // Game Over Screen Overlay
             if (gameState === STATE.GAMEOVER) {
                 CTX.save();
                 CTX.fillStyle = '#ff3333';
@@ -1096,10 +1078,9 @@
             }
         }
 
-        // Main Loop
         function gameLoop(timestamp) {
             if (!lastTime) lastTime = timestamp;
-            const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // Clamp frame time
+            const dt = Math.min((timestamp - lastTime) / 1000, 0.1);
             lastTime = timestamp;
 
             update(dt);
@@ -1108,7 +1089,6 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Start frame loop on window load
         window.onload = () => {
             requestAnimationFrame(gameLoop);
         };
